@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <readline/readline.h>
 #define MAXLINE 4096
 
 
@@ -11,33 +12,102 @@ void printprompt();
 int buildincmd(char * arguments[]);
 int main(void)
 {
-        char buf[MAXLINE];
-        pid_t pid;
+        char *buf;
+        pid_t pid,pid1;
         int status;
-        char* argulist[20];
+       int count=0;
+        char* argulist[20],*argulist1[20];
         int i=0,j=0;
+        int fd[2];
         printf("Welcome to afushell !\n ");
         printprompt();
-        while(fgets(buf,MAXLINE,stdin)!=NULL)
+        while((buf=readline(" "))!=NULL)
         {
-             if (buf[strlen(buf)-1] == '\n')
-             {
-                 buf[strlen(buf)-1] = 0;
-            }   
+//             if (buf[strlen(buf)-1] == '\n')
+//             {
+//                 buf[strlen(buf)-1] = 0;
+//            }   
 
             for(i=0;i<20;i++)
             {
                 argulist[i]=(char*)malloc(sizeof(char)*100);
+                argulist1[i]=(char*)malloc(sizeof(char)*100);
                 memset(argulist[i],'\0',sizeof(char)*100);
+                memset(argulist1[i],'\0',sizeof(char)*100);
            }
              
-             if(cmdtoargulist(buf,argulist)==1)
+             if(!(count=cmdtoargulist(buf,argulist)))
             {
               printf("explan the cmd is wrong");
             }
-
+//             for(i=0;i<20;i++)
+//    {
+//        if(argulist[i][0]!='\0'){ count++;}
+//printf("%d\n",count);
+//for(i=0;i<20;i++)
+//{printf("%s\n",argulist[i]);}
+//    }
              if(buildincmd(argulist))
              {
+                 j=0;
+                 for(i=0;i<count;i++)
+                 {
+                     if(argulist[i][0]=='|')
+                     j=i;
+                 }
+                 if(j!=0)
+                 {
+//                        printf("in |\n");
+                         argulist[j]=(char*)0;
+                        for(i=0;i<20;i++)
+                        {
+                        argulist1[i]=argulist[i+1+j];
+                        }
+ //printf("%s,%s\n",argulist[0],argulist1[0]);
+                        if((pid = fork())<0)
+                        {
+                         printf("fork error");
+                        }
+                        
+                        else if(pid == 0)
+                        { 
+
+                            if(pipe(fd)<0)
+                            {printf("pipe error");
+                                exit(0);
+                            }
+                            printf("%s",buf);
+                            if((pid1= fork())<0)
+                            {
+                            printf("fork error");
+                            }
+                             else if(pid1==0)
+                             {
+                                 close(fd[1]);
+                                dup2(fd[0],0);
+                                execvp(argulist1[0],argulist1);
+                                printf("couldn't execute: %s\n",buf);
+                                exit(127);
+                             }
+                             else
+                             {
+                             close(fd[0]);
+                        dup2(fd[1],1);
+                        execvp(argulist[0],argulist);
+                        printf("couldn't execute: %s\n",buf);
+                        exit(127);
+                        }  } 
+
+                        else{                         /*parent*/
+                        if ((pid=waitpid(pid,&status,0))<0)
+                         {
+                            printf("waitpid error");
+                            }
+
+                        }
+                 }
+                 else{
+//                     printf("not in |");
                  if((pid = fork())<0)
                  {
                     printf("fork error");
@@ -51,11 +121,12 @@ int main(void)
                   }   
 
                                                     /*parent*/
-                 if ((pid=waitpid(pid,&status,0))<0)
+                 else if ((pid=waitpid(pid,&status,0))<0)
                  {
                     printf("waitpid error");
                 }
-             }
+                 }
+                 }
          printprompt();
              }   
           exit(0);
@@ -65,7 +136,7 @@ int cmdtoargulist(char* cmdLine,char* argList[20])
 {
         char aChar;
         char* pChar;
-        int i = 0;
+        int i = 0,j=1;
         pChar = argList[0];
         while(1)
         {
@@ -75,6 +146,7 @@ int cmdtoargulist(char* cmdLine,char* argList[20])
              {
               *pChar = '\0';
               i++;
+              j++;
               pChar = argList[i];
              }
          else if(aChar == '\0')
@@ -82,7 +154,8 @@ int cmdtoargulist(char* cmdLine,char* argList[20])
               *pChar = '\0';
               i++;
               argList[i] = 0; 
-              return 0;
+             
+              return j;
              }
           else
              {
@@ -90,7 +163,7 @@ int cmdtoargulist(char* cmdLine,char* argList[20])
              pChar++;
              }
         }
-
+    
 }
 void printprompt()
 {
